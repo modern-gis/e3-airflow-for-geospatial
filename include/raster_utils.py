@@ -1,0 +1,107 @@
+import os
+import datetime
+import requests
+import rioxarray as rxr
+import xarray as xr
+import tarfile
+from rio_tiler.io import COGReader
+from pmtiles.writer import Writer
+from pmtiles.tile import Tile
+from io import BytesIO
+import os
+
+
+def construct_snodas_url(date: datetime.date) -> str:
+    """
+    Build the URL to the SNODAS .tar file for a given date.
+    Example: https://noaadata.apps.nsidc.org/NOAA/G02158/masked/2025/07_Jul/SNODAS_20250703.tar
+    """
+    year = date.strftime("%Y")
+    month = date.strftime("%m_%b")
+    day = date.strftime("%Y%m%d")
+    return f"https://noaadata.apps.nsidc.org/NOAA/G02158/masked/{year}/{month}/SNODAS_{day}.tar"
+
+def download_and_extract_snodas(date: datetime.date, output_dir: str = "data") -> str:
+    """
+    Downloads and extracts the SNODAS .tar file for the given date.
+    Returns path to SWE .dat file.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    url = construct_snodas_url(date)
+    tar_path = os.path.join(output_dir, f"SNODAS_{date.strftime('%Y%m%d')}.tar")
+
+    print(f"Downloading SNODAS from {url}")
+    r = requests.get(url, stream=True)
+    if r.status_code != 200:
+        raise Exception(f"Failed to download SNODAS archive: {url}")
+
+    with open(tar_path, "wb") as f:
+        for chunk in r.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+    # Extract the .tar file
+    with tarfile.open(tar_path, "r") as tar:
+        tar.extractall(path=output_dir)
+
+    # Locate the SWE .dat file
+    swe_file = None
+    for fname in os.listdir(output_dir):
+        if fname.startswith("us_ssmv01025SlL01T0024TTNATS") and fname.endswith("05DP001.dat"):
+            swe_file = os.path.join(output_dir, fname)
+
+    if not swe_file:
+        raise FileNotFoundError("SWE .dat file not found in extracted contents.")
+
+    return swe_file
+
+def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: str) -> str:
+    """
+    Subtract yesterday's snow raster from today's to compute daily snow change.
+    Assumes both rasters are aligned and single-band.
+    """
+    today = rxr.open_rasterio(tif_today, masked=True).squeeze()
+    yesterday = rxr.open_rasterio(tif_yesterday, masked=True).squeeze()
+
+    diff = today - yesterday
+    diff.rio.write_crs(today.rio.crs, inplace=True)
+    diff.rio.to_raster(output_path)
+
+    return output_path
+
+def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, tile_size: int = 256):
+    """
+    Generate PMTiles archive from a GeoTIFF using rio-tiler.
+    Stores 256x256 raster tiles as PNGs at web map tile zoom levels.
+    """
+    from PIL import Image
+
+    # Set up writer
+    tile_writer = Writer()
+
+    # Read COG raster
+    with COGReader(input_tif) as cog:
+        bounds = cog.bounds
+        minzoom = 0
+        maxzoom = 8  # Adjust as needed
+
+        for z in range(minzoom, maxzoom + 1):
+            tiles = cog.tile_bounds(z)
+            for tile_x, tile_y in tiles:
+                try:
+                    tile_data, _ = cog.tile(tile_x, tile_y, z)
+                    img = tile_data.render(img_format="PNG")
+
+                    buf = BytesIO()
+                    img.save(buf, format="PNG")
+                    buf.seek(0)
+
+                    tile = Tile(z=z, x=tile_x, y=tile_y, data=buf.read())
+                    tile_writer.add_tile(tile)
+                except Exception as e:
+                    print(f"Tile error at z={z}, x={tile_x}, y={tile_y}: {e}")
+
+    # Finalize archive
+    with open(output_pmtiles, "wb") as f:
+        tile_writer.write(f)
+
+    return output_pmtiles
