@@ -26,7 +26,7 @@ def download_and_extract_noaa_shapefile(output_dir: str = "data") -> str:
     with tarfile.open(archive_path, "r:gz") as tar:
         tar.extractall(path=output_dir)
 
-    shapefile_path = os.path.join(output_dir, "current_warnings", "current_warnings.shp")
+    shapefile_path = os.path.join(output_dir, "current_warnings.shp")
     if not os.path.exists(shapefile_path):
         raise FileNotFoundError("Shapefile not found after extraction")
 

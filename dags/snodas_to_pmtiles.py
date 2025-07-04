@@ -2,9 +2,15 @@ from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
 from datetime import timedelta, date
 import subprocess
+import requests
+import os
 
-from include.raster_utils import download_and_extract_snodas, compute_raster_difference, generate_raster_pmtiles
-
+from include.raster_utils import (
+    extract_snodas_swe_file,
+    compute_raster_difference,
+    generate_raster_pmtiles,
+    construct_snodas_url
+)
 
 # Default DAG arguments
 default_args = {
@@ -29,20 +35,73 @@ def snodas_to_pmtiles():
 
     @task
     def fetch_today_snodas_dat() -> str:
-        today = date.today()
-        return download_and_extract_snodas(today)
+        today = date.today() - timedelta(days=1)
+        tar_path = os.path.join("/tmp", f"SNODAS_{today.strftime('%Y%m%d')}.tar")
+
+        # Download
+        url = construct_snodas_url(today)
+        r = requests.get(url, stream=True)
+        if r.status_code != 200:
+            raise Exception(f"Failed to download SNODAS archive: {url}")
+        with open(tar_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        # Extract SWE
+        return extract_snodas_swe_file(tar_path, "/tmp", today)
 
     @task
     def fetch_yesterday_snodas_dat() -> str:
-        yesterday = date.today() - timedelta(days=1)
-        return download_and_extract_snodas(yesterday)
+        yesterday = date.today() - timedelta(days=2)
+        tar_path = os.path.join("/tmp", f"SNODAS_{yesterday.strftime('%Y%m%d')}.tar")
+
+        # Download
+        url = construct_snodas_url(yesterday)
+        r = requests.get(url, stream=True)
+        if r.status_code != 200:
+            raise Exception(f"Failed to download SNODAS archive: {url}")
+        with open(tar_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        # Extract SWE
+        return extract_snodas_swe_file(tar_path, "/tmp", yesterday)
 
     @task
-    def convert_dat_to_geotiff(input_dat_path: str) -> str:
+    def convert_dat_to_geotiff(input_dat_gz_path: str) -> str:
         """
-        Converts SNODAS .dat file to GeoTIFF using gdal_translate.
+        Decompresses a SNODAS .dat.gz file, creates an ENVI header, and converts to GeoTIFF using gdal_translate.
         """
+        import gzip
+        import shutil
+        import os
+
+        # Remove .gz
+        input_dat_path = input_dat_gz_path.replace(".gz", "")
+        
+        # Decompress
+        with gzip.open(input_dat_gz_path, "rb") as f_in:
+            with open(input_dat_path, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+
+        # Create .hdr file
+        hdr_path = input_dat_path.replace(".dat", ".hdr")
+        with open(hdr_path, "w") as hdr:
+            hdr.write("""ENVI
+samples = 6935
+lines = 3351
+bands = 1
+header offset = 0
+file type = ENVI Standard
+data type = 2
+interleave = bsq
+byte order = 1
+""")
+
+        # Generate output path
         output_tif_path = input_dat_path.replace(".dat", ".tif")
+
+        # Choose correct coordinates for post-2013 files
         cmd = [
             "gdal_translate",
             "-of", "GTiff",
@@ -53,6 +112,7 @@ def snodas_to_pmtiles():
             output_tif_path,
         ]
         subprocess.run(cmd, check=True)
+
         return output_tif_path
 
     @task

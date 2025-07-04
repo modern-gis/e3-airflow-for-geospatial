@@ -5,4 +5,6 @@ xarray
 requests
 rio-tiler
 pmtiles
+geopandas
 pillow
+apache-airflow

@@ -6,9 +6,10 @@ import xarray as xr
 import tarfile
 from rio_tiler.io import COGReader
 from pmtiles.writer import Writer
-from pmtiles.tile import Tile
+from pmtiles import tile
 from io import BytesIO
 import os
+import re
 
 
 def construct_snodas_url(date: datetime.date) -> str:
@@ -95,8 +96,8 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, tile_size: int 
                     img.save(buf, format="PNG")
                     buf.seek(0)
 
-                    tile = Tile(z=z, x=tile_x, y=tile_y, data=buf.read())
-                    tile_writer.add_tile(tile)
+                    tile_ = tile(z=z, x=tile_x, y=tile_y, data=buf.read())
+                    tile_writer.add_tile(tile_)
                 except Exception as e:
                     print(f"Tile error at z={z}, x={tile_x}, y={tile_y}: {e}")
 
@@ -105,3 +106,16 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, tile_size: int 
         tile_writer.write(f)
 
     return output_pmtiles
+
+def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime) -> str:
+    date_str = date.strftime("%Y%m%d")
+    pattern = re.compile(rf"us_ssmv11036tS.*{date_str}.*\.dat\.gz")
+
+    with tarfile.open(tar_path) as tar:
+        matching_members = [m for m in tar.getmembers() if pattern.search(m.name)]
+        if not matching_members:
+            raise FileNotFoundError(f"No SWE file found for {date_str} in {tar_path}")
+        
+        member = matching_members[0]
+        tar.extract(member, extract_to)
+        return os.path.join(extract_to, member.name)
