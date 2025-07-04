@@ -3,6 +3,7 @@ FROM quay.io/astronomer/astro-runtime:13.0.0-base
 USER root
 
 RUN apt-get update && apt-get install -y \
+    git \
     gdal-bin \
     libgdal-dev \
     python3-dev \
