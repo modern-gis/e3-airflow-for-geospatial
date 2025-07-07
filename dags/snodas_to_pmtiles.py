@@ -1,6 +1,6 @@
 from airflow.decorators import dag, task
-from airflow.utils.dates import days_ago
-from datetime import timedelta, date
+from datetime import timedelta, date, datetime
+from airflow.utils import timezone
 import subprocess
 import requests
 import os
@@ -22,7 +22,7 @@ default_args = {
 
 @dag(
     schedule_interval="@daily",
-    start_date=days_ago(1),
+    start_date=datetime(2025, 7, 6),
     catchup=False,
     default_args=default_args,
     tags=["snow", "raster", "pmtiles"],
