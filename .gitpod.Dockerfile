@@ -29,7 +29,7 @@ RUN pip install --upgrade pip \
   && pip install --no-cache-dir \
        -r /tmp/requirements.txt \
        "apache-airflow[celery,postgres,redis]==${AIRFLOW_VERSION}" \
-       rioxarray xarray rio-tiler pmtiles matplotlib pyarrow
+       rioxarray xarray rio-tiler pmtiles matplotlib pyarrow mapbox-vector-tile mercantile
 
 # Install Tippecanoe CLI (Linux x86_64)
 RUN curl -sL \
