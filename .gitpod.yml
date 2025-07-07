@@ -5,9 +5,14 @@ tasks:
   - name: Start Airflow
     command: |
       export AIRFLOW_HOME=/workspace/airflow
+      export AIRFLOW_CONFIG=$AIRFLOW_HOME/airflow.cfg
+      # ensure the directory and config file exist and are writable
+      mkdir -p "$AIRFLOW_HOME"
+      touch "$AIRFLOW_CONFIG"
+      # use SQLite in the airflow home
       export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////workspace/airflow/airflow.db
-      mkdir -p $AIRFLOW_HOME
       airflow standalone
+
 ports:
   - port: 8080
     onOpen: open-preview
