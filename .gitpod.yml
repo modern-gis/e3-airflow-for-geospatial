@@ -4,9 +4,10 @@ image:
 tasks:
   - name: Start Airflow
     command: |
-      export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db
+      export AIRFLOW_HOME=/workspace/airflow
+      export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////workspace/airflow/airflow.db
+      mkdir -p $AIRFLOW_HOME
       airflow standalone
-
 ports:
   - port: 8080
     onOpen: open-preview
