@@ -1,7 +1,7 @@
 import os
 import re
-datetime as datetime_module
-tarfile
+import datetime as datetime_module
+import tarfile
 import requests
 from io import BytesIO
 
