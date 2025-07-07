@@ -2,20 +2,10 @@ image:
   file: .gitpod.Dockerfile
 
 tasks:
-  - name: Init Airflow
-    init: |
-      export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db
-      airflow db init
-      airflow users create \
-        --username admin \
-        --firstname First \
-        --lastname Last \
-        --role Admin \
-        --email admin@example.com \
-        --password admin
+  - name: Start Airflow
     command: |
       export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db
-      airflow scheduler & airflow webserver
+      airflow standalone
 
 ports:
   - port: 8080
