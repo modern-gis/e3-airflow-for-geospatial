@@ -1,11 +1,13 @@
-# Astro Runtime includes the following pre-installed providers packages: https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
-rioxarray
-rasterio
-xarray
-requests
-rio-tiler
-pmtiles
+apache-airflow[celery,postgres,redis]==3.0.1
 geopandas
-pillow
-apache-airflow
+mapbox-vector-tile
 mercantile
+pmtiles
+pillow
+pyarrow
+rasterio
+rio-tiler
+rioxarray
+requests
+shapely
+xarray
