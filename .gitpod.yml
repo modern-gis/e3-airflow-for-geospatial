@@ -4,11 +4,20 @@ image:
 tasks:
   - name: Start Airflow
     command: |
-      # ensure our local airflow folder exists and is owned by gitpod
-      mkdir -p ./airflow
+      # Prepare Airflow home & config
+      mkdir -p ./airflow ./airflow/dags
+      touch ./airflow/airflow.cfg
+
+      # Link your repo DAGs into AIRFLOW_HOME
+      ln -sf $PWD/dags/* $PWD/airflow/dags/
+
+      # Export environment variables
       export AIRFLOW_HOME=$PWD/airflow
       export AIRFLOW_CONFIG=$AIRFLOW_HOME/airflow.cfg
-      export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////${AIRFLOW_HOME}/airflow.db
+      export AIRFLOW__CORE__DAGS_FOLDER=$PWD/dags
+      export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////$AIRFLOW_HOME/airflow.db
+
+      # Start Airflow (DB init + webserver + scheduler)
       airflow standalone
 
 ports:
