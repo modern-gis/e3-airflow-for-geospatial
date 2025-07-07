@@ -30,7 +30,8 @@ RUN pip install --no-cache-dir "apache-airflow[celery,postgres,redis]==${AIRFLOW
     xarray \
     pmtiles \
     rio-tiler \
-    matplotlib
+    matplotlib \
+    pyarrow
 
 # Install Tippecanoe CLI
 RUN curl -sL https://github.com/mapbox/tippecanoe/releases/download/2.15.0/tippecanoe-2.15.0.linux-x86_64 -o /usr/local/bin/tippecanoe \

@@ -69,43 +69,47 @@ def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: s
 
     return output_path
 
-def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, tile_size: int = 256):
+def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, tile_size: int = 256) -> str:
     """
-    Generate PMTiles archive from a GeoTIFF using rio-tiler.
-    Stores 256x256 raster tiles as PNGs at web map tile zoom levels.
+    Generate PMTiles archive from a GeoTIFF using rio-tiler and pmtiles.Writer.
     """
+    from rio_tiler.io import COGReader
+    from pmtiles.writer import Writer
+    from pmtiles.tile import tile as pm_tile
+    from io import BytesIO
     from PIL import Image
 
-    # Set up writer
-    tile_writer = Writer()
-
-    # Read COG raster
-    with COGReader(input_tif) as cog:
-        bounds = cog.bounds
-        minzoom = 0
-        maxzoom = 8  # Adjust as needed
-
-        for z in range(minzoom, maxzoom + 1):
-            tiles = cog.tile_bounds(z)
-            for tile_x, tile_y in tiles:
-                try:
-                    tile_data, _ = cog.tile(tile_x, tile_y, z)
-                    img = tile_data.render(img_format="PNG")
-
-                    buf = BytesIO()
-                    img.save(buf, format="PNG")
-                    buf.seek(0)
-
-                    tile_ = tile(z=z, x=tile_x, y=tile_y, data=buf.read())
-                    tile_writer.add_tile(tile_)
-                except Exception as e:
-                    print(f"Tile error at z={z}, x={tile_x}, y={tile_y}: {e}")
-
-    # Finalize archive
+    # Open output file and instantiate Writer with the file handle
     with open(output_pmtiles, "wb") as f:
-        tile_writer.write(f)
+        writer = Writer(f)
+
+        with COGReader(input_tif) as cog:
+            minzoom = 0
+            maxzoom = 8  # Adjust as needed
+
+            for z in range(minzoom, maxzoom + 1):
+                tile_bounds = cog.tile_bounds(z)
+                for tile_x, tile_y in tile_bounds:
+                    try:
+                        tile_data, _ = cog.tile(tile_x, tile_y, z)
+                        img = tile_data.render(img_format="PNG")
+
+                        buf = BytesIO()
+                        img.save(buf, format="PNG")
+                        buf.seek(0)
+
+                        # Create a PMTile and add it
+                        t = pm_tile(z=z, x=tile_x, y=tile_y, data=buf.read())
+                        writer.add_tile(t)
+
+                    except Exception as e:
+                        print(f"Tile error at z={z}, x={tile_x}, y={tile_y}: {e}")
+
+        # Finalize (writes the directory/index into the file)
+        writer.close()
 
     return output_pmtiles
+
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime) -> str:
     date_str = date.strftime("%Y%m%d")
