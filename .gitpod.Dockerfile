@@ -12,6 +12,11 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy and install Python dependencies
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
+
 # Environment variables for Airflow
 ENV AIRFLOW_VERSION=3.0.1 \
     AIRFLOW_HOME=/workspace/airflow \
