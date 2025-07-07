@@ -2,9 +2,17 @@ image:
   file: .gitpod.Dockerfile
 
 tasks:
-  - name: Start Airflow
-    init: docker-compose build
-    command: docker-compose up
+  - name: Init Airflow
+    command: |
+      airflow db init
+      airflow users create \
+        --username admin \
+        --firstname First \
+        --lastname Last \
+        --role Admin \
+        --email admin@example.com \
+        --password admin
+      airflow scheduler & airflow webserver
 
 ports:
   - port: 8080

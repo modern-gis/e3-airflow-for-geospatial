@@ -1,4 +1,6 @@
-FROM python:3.11-slim
+FROM apache/airflow:3.0.1-python3.11
+
+USER root
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -22,6 +24,7 @@ RUN curl -L https://github.com/protomaps/PMTiles/releases/latest/download/pmtile
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+USER airflow
+
+COPY requirements.txt /
+RUN pip install --no-cache-dir -r /requirements.txt
