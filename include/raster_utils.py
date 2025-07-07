@@ -7,8 +7,7 @@ from io import BytesIO
 
 import rioxarray as rxr
 from rio_tiler.io import COGReader
-from pmtiles.writer import Writer
-from pmtiles.tile import Tile
+from pmtiles.writer import Writer, Tile   # import Tile from writer, not pmtiles.tile
 from PIL import Image
 
 
@@ -88,6 +87,7 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, minzoom: int = 
                         writer.add_tile(tile_obj)
                     except Exception as e:
                         print(f"Tile error at z={z}, x={x}, y={y}: {e}")
+        # finalize: write directory/index into the archive
         writer.write()
     return output_pmtiles
 
