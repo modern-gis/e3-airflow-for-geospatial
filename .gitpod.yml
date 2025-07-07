@@ -4,21 +4,22 @@ image:
 tasks:
   - name: Start Airflow
     command: |
-      # Prepare airflow home & DAGs
+      # Prepare Airflow home & DAGs
       mkdir -p ./airflow ./airflow/dags
       touch ./airflow/airflow.cfg
       ln -sf $PWD/dags/* ./airflow/dags/
 
-      # Env for Airflow
+      # Export environment variables
       export AIRFLOW_HOME=$PWD/airflow
       export AIRFLOW_CONFIG=$AIRFLOW_HOME/airflow.cfg
       export AIRFLOW__CORE__DAGS_FOLDER=$PWD/dags
       export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////$AIRFLOW_HOME/airflow.db
-
-      # **Add this** JWT secret for the API auth
       export AIRFLOW__API_AUTH__JWT_SECRET=my_super_secret_key
 
-      # Now start everything
+      # Ensure Python can import your include/ package
+      export PYTHONPATH=$PYTHONPATH:$PWD
+
+      # Launch Airflow 3 in standalone mode
       airflow standalone
 
 ports:
