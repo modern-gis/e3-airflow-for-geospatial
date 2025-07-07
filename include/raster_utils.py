@@ -4,7 +4,7 @@ import datetime
 import tarfile
 import requests
 from io import BytesIO
-
+from rio_tiler.utils import array_to_image
 import rioxarray as rxr
 from rio_tiler.io import COGReader
 from pmtiles.writer import Writer
@@ -66,29 +66,32 @@ def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: s
 
 def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, minzoom: int = 0, maxzoom: int = 8) -> str:
     """
-    Generate PMTiles archive from a GeoTIFF COG using rio-tiler and pmtiles.Writer.
+    Generate a PMTiles archive from a GeoTIFF COG using rio-tiler and pmtiles.Writer.
     """
     with open(output_pmtiles, "wb") as f:
         writer = Writer(f)
+
         with COGReader(input_tif) as cog:
-            # use mercantile to list all tiles for each zoom
-            bounds = cog.bounds  # (west, south, east, north)
             for z in range(minzoom, maxzoom + 1):
-                for tile in mercantile.tiles(bounds[0], bounds[1], bounds[2], bounds[3], [z]):
-                    x, y = tile.x, tile.y
+                for x, y in cog.tile_bounds(z):
                     try:
-                        data, _ = cog.tile(x, y, z)
-                        img = data.render(img_format="PNG")
+                        # cog.tile now returns a NumPy array and mask
+                        data, mask = cog.tile(x, y, z)
+                        # convert array+mask to a PIL Image (PNG)
+                        img = array_to_image(data, mask=mask, img_format="PNG")
 
                         buf = BytesIO()
                         img.save(buf, format="PNG")
                         buf.seek(0)
 
+                        # write by numeric tileID
                         tid = zxy_to_tileid(z, x, y)
                         writer.write_tile(tid, buf.read())
+
                     except Exception as e:
                         print(f"Tile error at z={z}, x={x}, y={y}: {e}")
 
+        # finalize with minimal required metadata
         writer.finalize(
             metadata={
                 "tile_type": TileType.PNG,
@@ -107,7 +110,6 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, minzoom: int = 
         )
 
     return output_pmtiles
-
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
     """
