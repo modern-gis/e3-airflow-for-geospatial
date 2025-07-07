@@ -2,8 +2,9 @@ image:
   file: .gitpod.Dockerfile
 
 tasks:
-  - init: |
-      pip install --upgrade pip
+  - name: Init Airflow
+    init: |
+      export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db
       airflow db init
       airflow users create \
         --username admin \
@@ -12,7 +13,8 @@ tasks:
         --role Admin \
         --email admin@example.com \
         --password admin
-  - command: |
+    command: |
+      export AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db
       airflow scheduler & airflow webserver
 
 ports:
