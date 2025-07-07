@@ -9,7 +9,6 @@ from include.vector_utils import (
     generate_vector_pmtiles
 
 )
-from include.raster_utils import generate_raster_pmtiles  # can reuse this
 
 
 default_args = {

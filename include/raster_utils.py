@@ -4,14 +4,14 @@ import datetime
 import tarfile
 import requests
 from io import BytesIO
-from rio_tiler.utils import array_to_image
+
+import numpy as np
 import rioxarray as rxr
 from rio_tiler.io import COGReader
 from pmtiles.writer import Writer
 from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from PIL import Image
 import mercantile
-
 
 def construct_snodas_url(date: datetime.date) -> str:
     """
@@ -34,6 +34,7 @@ def download_and_extract_snodas(date: datetime.date, output_dir: str = "data") -
     tar_name = f"SNODAS_{date.strftime('%Y%m%d')}.tar"
     tar_path = os.path.join(output_dir, tar_name)
 
+    # Download archive
     response = requests.get(url, stream=True)
     if response.status_code != 200:
         raise Exception(f"Failed to download SNODAS archive: {url}")
@@ -41,12 +42,15 @@ def download_and_extract_snodas(date: datetime.date, output_dir: str = "data") -
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
 
+    # Extract archive
     with tarfile.open(tar_path, "r") as tar:
         tar.extractall(path=output_dir)
 
+    # Locate SWE .dat file
     for fname in os.listdir(output_dir):
         if fname.startswith("us_ssmv01025SlL01T0024TTNATS") and fname.endswith("05DP001.dat"):
             return os.path.join(output_dir, fname)
+
     raise FileNotFoundError("SWE .dat file not found in extracted contents.")
 
 
@@ -68,30 +72,41 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, minzoom: int = 
     """
     Generate a PMTiles archive from a GeoTIFF COG using rio-tiler and pmtiles.Writer.
     """
+    # Ensure output directory exists
+    out_dir = os.path.dirname(output_pmtiles)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
     with open(output_pmtiles, "wb") as f:
         writer = Writer(f)
-
         with COGReader(input_tif) as cog:
+            bounds = cog.bounds
             for z in range(minzoom, maxzoom + 1):
-                for x, y in cog.tile_bounds(z):
+                # Iterate tiles covering the dataset extent
+                for tile in mercantile.tiles(bounds[0], bounds[1], bounds[2], bounds[3], z):
+                    x, y = tile.x, tile.y
                     try:
-                        # cog.tile now returns a NumPy array and mask
+                        # Read raw data and mask
                         data, mask = cog.tile(x, y, z)
-                        # convert array+mask to a PIL Image (PNG)
-                        img = array_to_image(data, mask=mask, img_format="PNG")
-
+                        # Apply mask: fill masked pixels with 0 and cast to uint8
+                        arr = np.ma.array(data, mask=mask).filled(0).astype(np.uint8)
+                        # Handle multi-band arrays
+                        if arr.ndim == 3:
+                            img_arr = np.transpose(arr, (1, 2, 0))
+                        else:
+                            img_arr = arr
+                        # Convert to PIL image
+                        img = Image.fromarray(img_arr)
                         buf = BytesIO()
                         img.save(buf, format="PNG")
                         buf.seek(0)
 
-                        # write by numeric tileID
+                        # Write tile to PMTiles
                         tid = zxy_to_tileid(z, x, y)
                         writer.write_tile(tid, buf.read())
-
                     except Exception as e:
                         print(f"Tile error at z={z}, x={x}, y={y}: {e}")
-
-        # finalize with minimal required metadata
+        # Finalize with metadata
         writer.finalize(
             metadata={
                 "tile_type": TileType.PNG,
@@ -108,8 +123,8 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, minzoom: int = 
             },
             data={}
         )
-
     return output_pmtiles
+
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
     """
