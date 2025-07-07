@@ -8,3 +8,4 @@ pmtiles
 geopandas
 pillow
 apache-airflow
+mercantile

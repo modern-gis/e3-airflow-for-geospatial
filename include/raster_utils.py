@@ -1,7 +1,7 @@
 import os
 import re
-import datetime
-import tarfile
+datetime as datetime_module
+tarfile
 import requests
 from io import BytesIO
 
@@ -10,6 +10,7 @@ from rio_tiler.io import COGReader
 from pmtiles.writer import Writer
 from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from PIL import Image
+import mercantile
 
 
 def construct_snodas_url(date: datetime.date) -> str:
@@ -70,8 +71,11 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, minzoom: int = 
     with open(output_pmtiles, "wb") as f:
         writer = Writer(f)
         with COGReader(input_tif) as cog:
+            # use mercantile to list all tiles for each zoom
+            bounds = cog.bounds  # (west, south, east, north)
             for z in range(minzoom, maxzoom + 1):
-                for x, y in cog.tile_bounds(z):
+                for tile in mercantile.tiles(bounds[0], bounds[1], bounds[2], bounds[3], [z]):
+                    x, y = tile.x, tile.y
                     try:
                         data, _ = cog.tile(x, y, z)
                         img = data.render(img_format="PNG")
