@@ -7,7 +7,8 @@ from io import BytesIO
 
 import rioxarray as rxr
 from rio_tiler.io import COGReader
-from pmtiles.writer import Writer, Tile   # import Tile from writer, not pmtiles.tile
+from pmtiles.writer import Writer
+from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from PIL import Image
 
 
@@ -32,7 +33,6 @@ def download_and_extract_snodas(date: datetime.date, output_dir: str = "data") -
     tar_name = f"SNODAS_{date.strftime('%Y%m%d')}.tar"
     tar_path = os.path.join(output_dir, tar_name)
 
-    # Download archive
     response = requests.get(url, stream=True)
     if response.status_code != 200:
         raise Exception(f"Failed to download SNODAS archive: {url}")
@@ -40,15 +40,12 @@ def download_and_extract_snodas(date: datetime.date, output_dir: str = "data") -
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
 
-    # Extract archive
     with tarfile.open(tar_path, "r") as tar:
         tar.extractall(path=output_dir)
 
-    # Locate SWE .dat file
     for fname in os.listdir(output_dir):
         if fname.startswith("us_ssmv01025SlL01T0024TTNATS") and fname.endswith("05DP001.dat"):
             return os.path.join(output_dir, fname)
-
     raise FileNotFoundError("SWE .dat file not found in extracted contents.")
 
 
@@ -83,12 +80,28 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, minzoom: int = 
                         img.save(buf, format="PNG")
                         buf.seek(0)
 
-                        tile_obj = Tile(z=z, x=x, y=y, data=buf.read())
-                        writer.add_tile(tile_obj)
+                        tid = zxy_to_tileid(z, x, y)
+                        writer.write_tile(tid, buf.read())
                     except Exception as e:
                         print(f"Tile error at z={z}, x={x}, y={y}: {e}")
-        # finalize: write directory/index into the archive
-        writer.write()
+
+        writer.finalize(
+            metadata={
+                "tile_type": TileType.PNG,
+                "tile_compression": Compression.NONE,
+                "min_zoom": minzoom,
+                "max_zoom": maxzoom,
+                "min_lon_e7": int(-180.0 * 1e7),
+                "min_lat_e7": int(-85.0 * 1e7),
+                "max_lon_e7": int(180.0 * 1e7),
+                "max_lat_e7": int(85.0 * 1e7),
+                "center_zoom": minzoom,
+                "center_lon_e7": 0,
+                "center_lat_e7": 0,
+            },
+            data={}
+        )
+
     return output_pmtiles
 
 
