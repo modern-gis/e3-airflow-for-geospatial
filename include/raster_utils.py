@@ -69,13 +69,14 @@ def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: s
 
     return output_path
 
+from pmtiles.writer import Writer
+from pmtiles.tile import Tile   # change: import the Tile class
+
 def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, tile_size: int = 256) -> str:
     """
     Generate PMTiles archive from a GeoTIFF using rio-tiler and pmtiles.Writer.
     """
     from rio_tiler.io import COGReader
-    from pmtiles.writer import Writer
-    from pmtiles.tile import tile as pm_tile
     from io import BytesIO
     from PIL import Image
 
@@ -84,12 +85,9 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, tile_size: int 
         writer = Writer(f)
 
         with COGReader(input_tif) as cog:
-            minzoom = 0
-            maxzoom = 8  # Adjust as needed
-
+            minzoom, maxzoom = 0, 8
             for z in range(minzoom, maxzoom + 1):
-                tile_bounds = cog.tile_bounds(z)
-                for tile_x, tile_y in tile_bounds:
+                for tile_x, tile_y in cog.tile_bounds(z):
                     try:
                         tile_data, _ = cog.tile(tile_x, tile_y, z)
                         img = tile_data.render(img_format="PNG")
@@ -98,18 +96,17 @@ def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, tile_size: int 
                         img.save(buf, format="PNG")
                         buf.seek(0)
 
-                        # Create a PMTile and add it
-                        t = pm_tile(z=z, x=tile_x, y=tile_y, data=buf.read())
+                        # use the Tile class instead of pm_tile
+                        t = Tile(z=z, x=tile_x, y=tile_y, data=buf.read())
                         writer.add_tile(t)
 
                     except Exception as e:
                         print(f"Tile error at z={z}, x={tile_x}, y={tile_y}: {e}")
 
-        # Finalize (writes the directory/index into the file)
+        # finalize (writes the directory/index)
         writer.close()
 
     return output_pmtiles
-
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime) -> str:
     date_str = date.strftime("%Y%m%d")

@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     gdal-bin \
     libgdal-dev \
+    libsqlite3-dev \
     curl \
     unzip \
     git \
@@ -33,9 +34,13 @@ RUN pip install --no-cache-dir "apache-airflow[celery,postgres,redis]==${AIRFLOW
     matplotlib \
     pyarrow
 
-# Install Tippecanoe CLI
-RUN curl -sL https://github.com/mapbox/tippecanoe/releases/download/2.15.0/tippecanoe-2.15.0.linux-x86_64 -o /usr/local/bin/tippecanoe \
-    && chmod +x /usr/local/bin/tippecanoe
+# Build Tippecanoe from source to match container architecture
+RUN git clone --depth 1 https://github.com/mapbox/tippecanoe.git \
+    && cd tippecanoe \
+    && make -j"$(nproc)" \
+    && mv tippecanoe /usr/local/bin/ \
+    && cd .. \
+    && rm -rf tippecanoe
 
 # Install PMTiles CLI
 RUN curl -L https://github.com/protomaps/PMTiles/releases/latest/download/pmtiles-linux -o /usr/local/bin/pmtiles \
