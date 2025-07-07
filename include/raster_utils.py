@@ -1,6 +1,6 @@
 import os
 import re
-import datetime as datetime_module
+import datetime
 import tarfile
 import requests
 from io import BytesIO
