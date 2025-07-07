@@ -8,49 +8,52 @@ RUN apt-get update && apt-get install -y \
     gdal-bin \
     libgdal-dev \
     libsqlite3-dev \
+    protobuf-c-compiler \
+    libprotobuf-c-dev \
     curl \
     unzip \
     git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy and install Python dependencies
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements.txt
+  && rm -rf /var/lib/apt/lists/*
 
 # Environment variables for Airflow
 ENV AIRFLOW_VERSION=3.0.1 \
     AIRFLOW_HOME=/workspace/airflow \
     AIRFLOW__CORE__LOAD_EXAMPLES=False \
+    AIRFLOW__CORE__DAGS_FOLDER=/workspace/dags \
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////workspace/airflow/airflow.db \
     PIP_NO_CACHE_DIR=1
 
-# Install Airflow and geospatial Python packages
-RUN pip install --no-cache-dir "apache-airflow[celery,postgres,redis]==${AIRFLOW_VERSION}" \
-    rioxarray \
-    xarray \
-    pmtiles \
-    rio-tiler \
-    matplotlib \
-    pyarrow
+# Copy and install Python dependencies (including Geo/Parquet support)
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --upgrade pip \
+  && pip install --no-cache-dir \
+       -r /tmp/requirements.txt \
+       "apache-airflow[celery,postgres,redis]==${AIRFLOW_VERSION}" \
+       rioxarray xarray rio-tiler pmtiles matplotlib pyarrow
 
-# Build Tippecanoe from source to match container architecture
-RUN git clone --depth 1 https://github.com/mapbox/tippecanoe.git \
-    && cd tippecanoe \
-    && make -j"$(nproc)" \
-    && mv tippecanoe /usr/local/bin/ \
-    && cd .. \
-    && rm -rf tippecanoe
+# Install Tippecanoe CLI (Linux x86_64)
+RUN curl -sL \
+      https://github.com/mapbox/tippecanoe/releases/download/2.15.0/tippecanoe-2.15.0.linux-x86_64 \
+    -o /usr/local/bin/tippecanoe \
+  && chmod +x /usr/local/bin/tippecanoe
 
 # Install PMTiles CLI
-RUN curl -L https://github.com/protomaps/PMTiles/releases/latest/download/pmtiles-linux -o /usr/local/bin/pmtiles \
-    && chmod +x /usr/local/bin/pmtiles
+RUN curl -sL \
+      https://github.com/protomaps/PMTiles/releases/latest/download/pmtiles-linux \
+    -o /usr/local/bin/pmtiles \
+  && chmod +x /usr/local/bin/pmtiles
 
-# Set working directory
+# Create airflow user and workspace directories
+RUN useradd --create-home airflow \
+  && mkdir -p /workspace/airflow /workspace/dags \
+  && chown -R airflow: /workspace
+
+# Switch to non-root user
+USER airflow
 WORKDIR /workspace
 
-# Expose the Airflow webserver port
+# Expose Airflow webserver port
 EXPOSE 8080
 
-# Default to bash; commands run via .gitpod.yml
+# Default command (override in .gitpod.yml or CLI)
 CMD ["bash"]
