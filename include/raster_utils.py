@@ -7,7 +7,8 @@ from io import BytesIO
 
 import rioxarray as rxr
 from rio_tiler.io import COGReader
-from pmtiles.writer import Writer, Tile
+from pmtiles.writer import Writer
+from pmtiles.tile import Tile
 from PIL import Image
 
 
