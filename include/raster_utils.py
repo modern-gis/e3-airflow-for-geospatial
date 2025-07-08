@@ -16,6 +16,7 @@ import subprocess
 from typing import Union
 from typing_extensions import Literal
 import rasterio
+import shutil
 
 def construct_snodas_url(date: datetime.date) -> str:
     """
@@ -82,23 +83,24 @@ def generate_raster_pmtiles(
     silent: bool = True,
 ) -> Path:
     """
-    1) Expand single‐band -> RGB
-    2) Convert RGB -> COG
+    1) Replicate single‐band -> 3‐band RGB
+    2) Convert RGB -> Cloud-Optimized GeoTIFF (COG)
     3) Tile COG -> PMTiles (PNG, bilinear)
     """
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
 
-    # 1) RGB‐expand
+    # 1) replicate band1 into R,G,B
     rgb_path = input_raster.with_name(f"{input_raster.stem}_rgb.tif")
     subprocess.run([
         "gdal_translate",
-        "-expand", "rgb",
+        "-of", "GTiff",
+        "-b", "1", "-b", "1", "-b", "1",
         str(input_raster),
         str(rgb_path),
     ], check=True)
 
-    # 2) Make it a COG for faster tile reads
+    # 2) create a COG for efficient tile reads (no TILING_SCHEME)
     cog_path = input_raster.with_name(f"{input_raster.stem}_cog.tif")
     subprocess.run([
         "gdal_translate",
@@ -106,10 +108,10 @@ def generate_raster_pmtiles(
         str(rgb_path),
         str(cog_path),
         "-co", "BLOCKSIZE=512",
-        "-co", "TILING_SCHEME=XYZ",
+        # you can add other COG options here, e.g. "-co","COMPRESS=DEFLATE"
     ], check=True)
 
-    # 3) Generate PMTiles from the COG
+    # 3) generate PMTiles using rio-pmtiles in PNG mode
     cmd = [
         "rio", "pmtiles",
         str(cog_path),
