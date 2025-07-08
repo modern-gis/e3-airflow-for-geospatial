@@ -28,6 +28,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip \
     && pip install numpy==1.26.4 \
     && pip install --no-cache-dir -r /tmp/requirements.txt
+
     
 # 4) Airflow env vars
 ENV AIRFLOW_VERSION=3.0.1 \
