@@ -70,6 +70,7 @@ def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: s
     diff.rio.to_raster(output_path)
     return output_path
 
+
 def generate_raster_pmtiles(
     input_raster: Union[str, Path],
     output_pmtiles: Union[str, Path],
@@ -80,27 +81,23 @@ def generate_raster_pmtiles(
     silent: bool = True,
 ) -> Path:
     """
-    Generate a PMTiles file from a raster using rio-pmtiles, via an intermediate COG.
-
-    Returns the Path to the .pmtiles file.
+    Generate a PMTiles file from a raster using rio-pmtiles.
     """
+
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
 
-    # build a COG path next to the input
-    cog_path = input_raster.with_name(f"{input_raster.stem}_cog.tif")
-
-    # 1) create a Cloud-Optimized GeoTIFF
+    # First convert to a Cloud-Optimized GeoTIFF
+    cog_path = input_raster.with_name(input_raster.stem + "_cog.tif")
     subprocess.run([
         "gdal_translate",
         "-of", "COG",
+        "-co", "BLOCKSIZE=512",
         str(input_raster),
         str(cog_path),
-        "-co", "BLOCKSIZE=512",
-        "-co", "TILING_SCHEME=XYZ",
     ], check=True)
 
-    # 2) produce PMTiles from that COG
+    # Now tile it into PMTiles
     cmd = [
         "rio", "pmtiles",
         str(cog_path),
@@ -115,8 +112,6 @@ def generate_raster_pmtiles(
     subprocess.run(cmd, check=True)
 
     return output_pmtiles
-
-
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
     """
