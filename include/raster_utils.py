@@ -81,13 +81,17 @@ def generate_raster_pmtiles(
     silent: bool = True,
 ) -> Path:
     """
-    Generate a PMTiles file from a raster using rio-pmtiles.
+    Generate a PMTiles file from a raster using rio-pmtiles, restricting
+    to only the tiles that intersect the source image.
     """
-
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
 
-    # Run rio-pmtiles directly on the GeoTIFF
+    # Compute the geographic bounds of our source
+    with rasterio.open(input_raster) as src:
+        left, bottom, right, top = src.bounds
+
+    # Build the rio-pmtiles command
     cmd = [
         "rio", "pmtiles",
         str(input_raster),
@@ -95,6 +99,7 @@ def generate_raster_pmtiles(
         "--format", fmt,
         "--tile-size", str(tile_size),
         "--resampling", resampling,
+        "--bounds", f"{left},{bottom},{right},{top}",
     ]
     if silent:
         cmd.append("--silent")
