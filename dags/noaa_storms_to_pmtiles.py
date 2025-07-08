@@ -14,8 +14,7 @@ from include.vector_utils import (
 BASE_TILE_DIR = os.path.join(os.environ.get("AIRFLOW_HOME", "/workspace/airflow"), "tiles")
 os.makedirs(BASE_TILE_DIR, exist_ok=True)
 
-S3_BUCKET = os.environ["AWS_S3_BUCKET"]
-S3_PREFIX = os.environ.get("AWS_S3_PREFIX", "pmtiles/")
+S3_BUCKET = os.environ["MODERN_GIS_S3_BUCKET"]
 s3 = boto3.client("s3")
 
 
@@ -63,7 +62,7 @@ def noaa_storms_to_pmtiles():
 
     @task
     def upload(pmtiles_path: str) -> str:
-        key = os.path.join(S3_PREFIX, os.path.basename(pmtiles_path))
+        key = os.path.join('pmtiles', os.path.basename(pmtiles_path))
         s3.upload_file(
             Filename=pmtiles_path,
             Bucket=S3_BUCKET,
