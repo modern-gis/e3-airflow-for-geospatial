@@ -58,71 +58,61 @@ def download_and_extract_snodas(date: datetime.date, output_dir: str = "data") -
     raise FileNotFoundError("SWE .dat file not found in extracted contents.")
 
 
-def compute_raster_difference(
-    today_tif: Union[str, Path],
-    yesterday_tif: Union[str, Path],
-    output_tif: Union[str, Path],
-) -> str:
+def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: str) -> str:
     """
-    Subtract yesterday's raster from today's, preserving CRS, transform, nodata, etc.
+    Subtract yesterday's snow raster from today's to compute daily snow change.
+    Assumes single-band COGs aligned on the same grid.
     """
-    today_tif = Path(today_tif)
-    yesterday_tif = Path(yesterday_tif)
-    output_tif = Path(output_tif)
+    today = rxr.open_rasterio(tif_today, masked=True).squeeze()
+    yesterday = rxr.open_rasterio(tif_yesterday, masked=True).squeeze()
 
-    # Read both rasters and capture metadata inside the context
-    with rasterio.open(today_tif) as src1, rasterio.open(yesterday_tif) as src2:
-        profile = src1.profile.copy()
-        data1 = src1.read(1)
-        data2 = src2.read(1)
-        nodata1 = src1.nodata
-        nodata2 = src2.nodata
-
-    # Compute difference with proper masking
-    diff = data1.astype('float32') - data2.astype('float32')
-    mask = None
-    if nodata1 is not None or nodata2 is not None:
-        mask1 = (data1 == nodata1) if nodata1 is not None else False
-        mask2 = (data2 == nodata2) if nodata2 is not None else False
-        mask = mask1 | mask2
-        diff = diff.astype('float32')
-        diff[mask] = nodata1 if nodata1 is not None else -9999
-
-    # Update profile for single-band output
-    profile.update(
-        dtype='float32',
-        count=1,
-        compress='lzw',
-        nodata=nodata1
-    )
-
-    # Write difference GeoTIFF
-    output_tif.parent.mkdir(parents=True, exist_ok=True)
-    with rasterio.open(output_tif, 'w', **profile) as dst:
-        dst.write(diff, 1)
-
-    return str(output_tif)
+    diff = today - yesterday
+    diff.rio.write_crs(today.rio.crs, inplace=True)
+    diff.rio.to_raster(output_path)
+    return output_path
 
 
 def generate_raster_pmtiles(
-    input_raster: Union[str, Path],
-    output_pmtiles: Union[str, Path],
+    input_raster: str | Path,
+    output_pmtiles: str | Path,
     *,
-    fmt: Literal["PNG", "JPEG", "WEBP"] = "WEBP",
+    fmt: Literal["PNG", "JPEG", "WEBP"] = "PNG",
     tile_size: int = 512,
     resampling: Literal["nearest", "bilinear", "cubic", "lanczos"] = "bilinear",
     silent: bool = True,
-) -> str:
+) -> Path:
     """
-    Generate a PMTiles file directly from a GeoTIFF using rio-pmtiles.
+    1) Expand single‐band -> RGB
+    2) Convert RGB -> COG
+    3) Tile COG -> PMTiles (PNG, bilinear)
     """
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
-    output_pmtiles.parent.mkdir(parents=True, exist_ok=True)
 
+    # 1) RGB‐expand
+    rgb_path = input_raster.with_name(f"{input_raster.stem}_rgb.tif")
+    subprocess.run([
+        "gdal_translate",
+        "-expand", "rgb",
+        str(input_raster),
+        str(rgb_path),
+    ], check=True)
+
+    # 2) Make it a COG for faster tile reads
+    cog_path = input_raster.with_name(f"{input_raster.stem}_cog.tif")
+    subprocess.run([
+        "gdal_translate",
+        "-of", "COG",
+        str(rgb_path),
+        str(cog_path),
+        "-co", "BLOCKSIZE=512",
+        "-co", "TILING_SCHEME=XYZ",
+    ], check=True)
+
+    # 3) Generate PMTiles from the COG
     cmd = [
         "rio", "pmtiles",
-        str(input_raster),
+        str(cog_path),
         str(output_pmtiles),
         "--format", fmt,
         "--tile-size", str(tile_size),
@@ -132,7 +122,7 @@ def generate_raster_pmtiles(
         cmd.append("--silent")
 
     subprocess.run(cmd, check=True)
-    return str(output_pmtiles)
+    return output_pmtiles
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
     """

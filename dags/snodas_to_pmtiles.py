@@ -104,7 +104,7 @@ byte order = 1
         return str(generate_raster_pmtiles(
             input_raster=diff_tif,
             output_pmtiles=output,
-            fmt="WEBP",
+            fmt="PNG",
             tile_size=512,
             resampling="bilinear",
             silent=True
