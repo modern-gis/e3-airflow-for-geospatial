@@ -87,20 +87,10 @@ def generate_raster_pmtiles(
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
 
-    # First convert to a Cloud-Optimized GeoTIFF
-    cog_path = input_raster.with_name(input_raster.stem + "_cog.tif")
-    subprocess.run([
-        "gdal_translate",
-        "-of", "COG",
-        "-co", "BLOCKSIZE=512",
-        str(input_raster),
-        str(cog_path),
-    ], check=True)
-
-    # Now tile it into PMTiles
+    # Run rio-pmtiles directly on the GeoTIFF
     cmd = [
         "rio", "pmtiles",
-        str(cog_path),
+        str(input_raster),
         str(output_pmtiles),
         "--format", fmt,
         "--tile-size", str(tile_size),
@@ -110,7 +100,6 @@ def generate_raster_pmtiles(
         cmd.append("--silent")
 
     subprocess.run(cmd, check=True)
-
     return output_pmtiles
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
