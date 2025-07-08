@@ -73,8 +73,8 @@ def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: s
 
 
 def generate_raster_pmtiles(
-    input_raster: Union[str, Path],
-    output_pmtiles: Union[str, Path],
+    input_raster: str | Path,
+    output_pmtiles: str | Path,
     *,
     fmt: Literal["PNG", "JPEG", "WEBP"] = "WEBP",
     tile_size: int = 512,
@@ -82,32 +82,44 @@ def generate_raster_pmtiles(
     silent: bool = True,
 ) -> Path:
     """
-    Generate a PMTiles file from a raster using rio-pmtiles, restricting
-    to only the tiles that intersect the source image.
+    Generate a PMTiles file from a raster using rio-pmtiles.
+
+    1. Convert the input GeoTIFF to a valid COG (Cloud-Optimized GeoTIFF).
+    2. Run `rio pmtiles` on that COG.
+
+    Returns the path to the generated .pmtiles file.
     """
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
 
-    # Compute the geographic bounds of our source
-    with rasterio.open(input_raster) as src:
-        left, bottom, right, top = src.bounds
+    # build a COG alongside the input, named "<stem>_cog.tif"
+    cog_path = input_raster.with_name(input_raster.stem + "_cog.tif")
 
-    # Build the rio-pmtiles command
+    # 1. Create a proper COG (remove the invalid TILING_SCHEME)
+    subprocess.run([
+        "gdal_translate",
+        "-of", "COG",
+        "-co", "BLOCKSIZE=512",
+        "-co", "COMPRESS=DEFLATE",
+        str(input_raster),
+        str(cog_path),
+    ], check=True)
+
+    # 2. Generate PMTiles from the COG
     cmd = [
         "rio", "pmtiles",
-        str(input_raster),
+        str(cog_path),
         str(output_pmtiles),
         "--format", fmt,
         "--tile-size", str(tile_size),
         "--resampling", resampling,
-        "--bounds", f"{left},{bottom},{right},{top}",
     ]
     if silent:
         cmd.append("--silent")
 
     subprocess.run(cmd, check=True)
-    return output_pmtiles
 
+    return output_pmtiles
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
     """
     Extracts the SNODAS SWE .dat.gz file matching the given date from a .tar archive.
