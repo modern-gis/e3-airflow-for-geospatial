@@ -16,6 +16,8 @@ import subprocess
 from typing import Union
 from typing_extensions import Literal
 import rasterio
+import tempfile
+import textwrap
 import shutil
 
 def construct_snodas_url(date: datetime.date) -> str:
@@ -72,10 +74,9 @@ def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: s
     diff.rio.to_raster(output_path)
     return output_path
 
-
 def generate_raster_pmtiles(
-    input_raster: str | Path,
-    output_pmtiles: str | Path,
+    input_raster: Union[str, Path],
+    output_pmtiles: Union[str, Path],
     *,
     fmt: Literal["PNG", "JPEG", "WEBP"] = "PNG",
     tile_size: int = 512,
@@ -83,38 +84,51 @@ def generate_raster_pmtiles(
     silent: bool = True,
 ) -> Path:
     """
-    1) Replicate single‐band -> 3‐band RGB
-    2) Convert RGB -> Cloud-Optimized GeoTIFF (COG)
-    3) Tile COG -> PMTiles (PNG, bilinear)
+    1) color‐relief your diff into an RGB GeoTIFF
+    2) convert that to a COG (with overviews)
+    3) pmtiles it
     """
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
 
-    # 1) replicate band1 into R,G,B
-    rgb_path = input_raster.with_name(f"{input_raster.stem}_rgb.tif")
+    # 1) generate a temporary colormap file
+    cmap_txt = textwrap.dedent("""\
+        # value  R   G   B
+        -50     0   0   255
+         0     255 255 255
+         50    255 0   0
+    """)
+    with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".txt") as f:
+        f.write(cmap_txt)
+        cmap_path = f.name
+
+    # 2) apply color relief
+    color_tif = input_raster.with_name(input_raster.stem + "_color.tif")
     subprocess.run([
-        "gdal_translate",
-        "-of", "GTiff",
-        "-b", "1", "-b", "1", "-b", "1",
+        "gdaldem", "color-relief",
         str(input_raster),
-        str(rgb_path),
+        cmap_path,
+        str(color_tif),
+        "-alpha"
     ], check=True)
 
-    # 2) create a COG for efficient tile reads (no TILING_SCHEME)
-    cog_path = input_raster.with_name(f"{input_raster.stem}_cog.tif")
+    # 3) build a proper COG with overviews
+    cog_tif = color_tif.with_name(color_tif.stem + "_cog.tif")
     subprocess.run([
         "gdal_translate",
         "-of", "COG",
-        str(rgb_path),
-        str(cog_path),
+        str(color_tif),
+        str(cog_tif),
         "-co", "BLOCKSIZE=512",
-        # you can add other COG options here, e.g. "-co","COMPRESS=DEFLATE"
+        "-co", "COMPRESS=DEFLATE",
+        "-co", "OVERVIEWS=AUTOGENERATE",
+        "-co", "OVERVIEW_RESAMPLING=AVERAGE",
     ], check=True)
 
-    # 3) generate PMTiles using rio-pmtiles in PNG mode
+    # 4) tile it to PMTiles
     cmd = [
         "rio", "pmtiles",
-        str(cog_path),
+        str(cog_tif),
         str(output_pmtiles),
         "--format", fmt,
         "--tile-size", str(tile_size),
@@ -122,8 +136,8 @@ def generate_raster_pmtiles(
     ]
     if silent:
         cmd.append("--silent")
-
     subprocess.run(cmd, check=True)
+
     return output_pmtiles
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
