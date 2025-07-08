@@ -9,3 +9,8 @@ airflow-webserver.pid
 webserver_config.py
 airflow.cfg
 airflow.db
+airflow/logs/*
+airflow/tiles/*
+airflow/dags/__pycache__
+airflow/simple_auth_manager_passwords.json.generated
+data/
