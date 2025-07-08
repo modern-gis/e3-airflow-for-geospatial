@@ -83,32 +83,14 @@ def generate_raster_pmtiles(
 ) -> Path:
     """
     Generate a PMTiles file from a raster using rio-pmtiles.
-
-    1. Convert the input GeoTIFF to a valid COG (Cloud-Optimized GeoTIFF).
-    2. Run `rio pmtiles` on that COG.
-
-    Returns the path to the generated .pmtiles file.
+    This version skips the COG conversion and calls rio pmtiles directly.
     """
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
 
-    # build a COG alongside the input, named "<stem>_cog.tif"
-    cog_path = input_raster.with_name(input_raster.stem + "_cog.tif")
-
-    # 1. Create a proper COG (remove the invalid TILING_SCHEME)
-    subprocess.run([
-        "gdal_translate",
-        "-of", "COG",
-        "-co", "BLOCKSIZE=512",
-        "-co", "COMPRESS=DEFLATE",
-        str(input_raster),
-        str(cog_path),
-    ], check=True)
-
-    # 2. Generate PMTiles from the COG
     cmd = [
         "rio", "pmtiles",
-        str(cog_path),
+        str(input_raster),
         str(output_pmtiles),
         "--format", fmt,
         "--tile-size", str(tile_size),
@@ -120,6 +102,7 @@ def generate_raster_pmtiles(
     subprocess.run(cmd, check=True)
 
     return output_pmtiles
+
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
     """
     Extracts the SNODAS SWE .dat.gz file matching the given date from a .tar archive.
