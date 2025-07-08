@@ -1,20 +1,17 @@
+import os
+import pytest
 from airflow.models import DagBag
 
-def test_noaa_dag_loads():
-    dagbag = DagBag()
-    assert "noaa_storms_to_pmtiles" in dagbag.dags
-    dag = dagbag.get_dag("noaa_storms_to_pmtiles")
-    assert dag is not None
-    assert len(dag.tasks) >= 4  # fetch, convert, tile, upload
+# ensure env var for DAG import
+os.environ["MODERN_GIS_S3_BUCKET"] = "modern-gis-test-bucket"
+os.environ["AIRFLOW_HOME"] = "/tmp/airflow"
 
-def test_task_ids():
-    dagbag = DagBag()
-    dag = dagbag.get_dag("noaa_storms_to_pmtiles")
-    expected_tasks = {
-        "fetch_shapefile",
-        "to_geoparquet",
-        "to_pmtiles",
-        "upload",
-    }
-    actual = set(task.task_id for task in dag.tasks)
-    assert expected_tasks.issubset(actual)
+@pytest.fixture(scope="session")
+def dag_bag():
+    return DagBag(include_examples=False)
+
+def test_dag_and_tasks_exist(dag_bag):
+    dag = dag_bag.get_dag("noaa_storms_to_pmtiles")
+    assert dag is not None, "DAG 'noaa_storms_to_pmtiles' failed to load"
+    expected = {"fetch_shapefile", "to_geoparquet", "to_pmtiles", "upload"}
+    assert {t.task_id for t in dag.tasks} == expected
