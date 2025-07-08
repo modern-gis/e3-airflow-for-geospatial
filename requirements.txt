@@ -11,3 +11,4 @@ rioxarray
 requests
 shapely
 xarray
+boto3

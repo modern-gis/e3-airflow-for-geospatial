@@ -2,6 +2,7 @@ from airflow.decorators import dag, task
 from datetime import timedelta, datetime
 from airflow.utils import timezone
 import os
+import boto3
 
 from include.vector_utils import (
     download_and_extract_noaa_shapefile,
@@ -12,6 +13,11 @@ from include.vector_utils import (
 # Where to write your tiles
 BASE_TILE_DIR = os.path.join(os.environ.get("AIRFLOW_HOME", "/workspace/airflow"), "tiles")
 os.makedirs(BASE_TILE_DIR, exist_ok=True)
+
+S3_BUCKET = os.environ["AWS_S3_BUCKET"]
+S3_PREFIX = os.environ.get("AWS_S3_PREFIX", "pmtiles/")
+s3 = boto3.client("s3")
+
 
 default_args = {
     "owner": "modern-gis",
@@ -56,9 +62,18 @@ def noaa_storms_to_pmtiles():
 
 
     @task
-    def upload(pmtiles_file: str) -> str:
-        print(f"Simulating upload of {pmtiles_file}")
-        return f"s3://your-bucket/path/{os.path.basename(pmtiles_file)}"
+    def upload(pmtiles_path: str) -> str:
+        key = os.path.join(S3_PREFIX, os.path.basename(pmtiles_path))
+        s3.upload_file(
+            Filename=pmtiles_path,
+            Bucket=S3_BUCKET,
+            Key=key,
+            ExtraArgs={
+                "ACL": "public-read",
+                "ContentType": "application/x-protobuf",
+            },
+        )
+        return f"https://{S3_BUCKET}.s3.amazonaws.com/{key}"
 
     # define DAG flow
     shp       = fetch_shapefile()

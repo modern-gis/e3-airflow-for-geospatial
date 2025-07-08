@@ -1,8 +1,13 @@
+# .github/workflows/classroom.yml
 name: ✅ Grade Brick E3
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -10,29 +15,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.9
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
 
-    - name: Install system packages
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gdal-bin tippecanoe
-        curl -L https://github.com/protomaps/PMTiles/releases/latest/download/pmtiles-linux -o /usr/local/bin/pmtiles
-        chmod +x /usr/local/bin/pmtiles
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin tippecanoe
+          curl -L https://github.com/protomaps/PMTiles/releases/latest/download/pmtiles-linux \
+               -o /usr/local/bin/pmtiles
+          chmod +x /usr/local/bin/pmtiles
 
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # ensure pytest is available
+          pip install pytest
 
-    - name: Run tests
-      run: pytest tests/
+      - name: Run tests
+        run: pytest tests/
 
-    - name: ✅ Print badge proof
-      if: success()
-      run: |
-        echo "::notice title=Badge Unlocked::brick_e3_automation_$(date +%s)"
+      - name: ✅ Print badge proof
+        if: success()
+        run: |
+          echo "::notice title=Badge Unlocked::brick_e3_automation_$(date +%s)"

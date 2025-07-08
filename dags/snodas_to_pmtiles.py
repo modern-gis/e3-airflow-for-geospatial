@@ -3,6 +3,7 @@ from datetime import timedelta, date, datetime
 import os
 import subprocess
 import requests
+import boto3
 from pathlib import Path
 
 from include.raster_utils import (
@@ -16,6 +17,10 @@ from include.raster_utils import (
 AIRFLOW_HOME = os.environ.get("AIRFLOW_HOME", "/workspace/airflow")
 BASE_RASTER_TILE_DIR = os.path.join(AIRFLOW_HOME, "tiles", "raster")
 os.makedirs(BASE_RASTER_TILE_DIR, exist_ok=True)
+
+S3_BUCKET = os.environ["AWS_S3_BUCKET"]
+S3_PREFIX = os.environ.get("AWS_S3_PREFIX", "pmtiles/")
+s3 = boto3.client("s3")
 
 default_args = {
     "owner": "modern-gis",
@@ -112,8 +117,17 @@ byte order = 1
 
     @task
     def upload_to_s3(pmtiles_file: str) -> str:
-        print(f"Simulating upload of {pmtiles_file}")
-        return f"s3://your-bucket/path/{os.path.basename(pmtiles_file)}"
+        key = os.path.join(S3_PREFIX, os.path.basename(pmtiles_path))
+        s3.upload_file(
+            Filename=pmtiles_path,
+            Bucket=S3_BUCKET,
+            Key=key,
+            ExtraArgs={
+                "ACL": "public-read",
+                "ContentType": "application/x-protobuf",
+            },
+        )
+        return f"https://{S3_BUCKET}.s3.amazonaws.com/{key}"
 
     # DAG flow
     today_dat     = fetch_snodas_dat(1)
