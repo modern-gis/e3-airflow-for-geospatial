@@ -66,11 +66,7 @@ def noaa_storms_to_pmtiles():
         s3.upload_file(
             Filename=pmtiles_path,
             Bucket=S3_BUCKET,
-            Key=key,
-            ExtraArgs={
-                "ACL": "public-read",
-                "ContentType": "application/x-protobuf",
-            },
+            Key=key
         )
         return f"https://{S3_BUCKET}.s3.amazonaws.com/{key}"
 

@@ -120,11 +120,7 @@ byte order = 1
         s3.upload_file(
             Filename=pmtiles_file,
             Bucket=S3_BUCKET,
-            Key=key,
-            ExtraArgs={
-                "ACL": "public-read",
-                "ContentType": "application/x-protobuf",
-            },
+            Key=key
         )
         return f"https://{S3_BUCKET}.s3.amazonaws.com/{key}"
 
