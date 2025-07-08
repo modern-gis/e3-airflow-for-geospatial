@@ -49,50 +49,74 @@ def generate_vector_pmtiles(
     output_pmtiles: Union[str, Path],
     layer_name: Optional[str] = None,
     guess_maxzoom: bool = True,
-    projection: str = "EPSG:4326"
-) -> None:
+    projection: str = "EPSG:4326",
+) -> str:
     """
-    Generate a vector PMTiles file from GeoJSON/FlatGeobuf/etc using Tippecanoe.
+    Generate a vector PMTiles from GeoParquet, GeoJSON, Shapefile, etc.
 
-    Parameters
-    ----------
-    input_path
-        Path to the input vector file (GeoJSON, .fgb, .json.gz, .csv, etc).
-    output_pmtiles
-        Path where the .pmtiles file will be written.
-    layer_name
-        Name of the layer inside the vector tiles. Defaults to the input filename stem.
-    guess_maxzoom
-        If True, pass -zg to let tippecanoe pick a good maxzoom.
-    projection
-        The input projection; passed as --projection=<projection>.
+    - If input is Parquet (.parquet, .pq), it is read with GeoPandas and
+      dumped to a temporary GeoJSON for tippecanoe.
+    - If input is Shapefile (.shp), it is read and dumped likewise.
+    - Otherwise tippecanoe is invoked directly on the file (GeoJSON, .csv, .fgb).
 
-    Raises
-    ------
-    subprocess.CalledProcessError
-        If tippecanoe exits with a non-zero status.
+    Returns the output_pmtiles path as a string.
     """
     input_path = Path(input_path)
     output_pmtiles = Path(output_pmtiles)
+    os.makedirs(output_pmtiles.parent, exist_ok=True)
 
+    # derive layer name
     if layer_name is None:
         layer_name = input_path.stem
 
+    # determine source file for tippecanoe
+    cleanup: list[Path] = []
+    suffix = input_path.suffix.lower()
+
+    if suffix in {".parquet", ".pq"}:
+        # read parquet and write to temporary GeoJSON
+        gdf = gpd.read_parquet(input_path)
+        tmp = tempfile.NamedTemporaryFile(suffix=".geojson", delete=False)
+        tmp_path = Path(tmp.name)
+        tmp.close()
+        gdf.to_file(tmp_path, driver="GeoJSON")
+        source = tmp_path
+        cleanup.append(tmp_path)
+
+    elif suffix == ".shp":
+        # read shapefile and write to temporary GeoJSON
+        gdf = gpd.read_file(input_path)
+        tmp = tempfile.NamedTemporaryFile(suffix=".geojson", delete=False)
+        tmp_path = Path(tmp.name)
+        tmp.close()
+        gdf.to_file(tmp_path, driver="GeoJSON")
+        source = tmp_path
+        cleanup.append(tmp_path)
+
+    else:
+        # assume tippecanoe can handle it (GeoJSON, .json, .csv, .fgb, etc)
+        source = input_path
+
+    # build tippecanoe command
     cmd = [
         "tippecanoe",
-        # guess a sensible maxzoom based on data density
-        * (["-zg"] if guess_maxzoom else []),
-        # ensure we're in WGS84 by default
+        *(["-zg"] if guess_maxzoom else []),
         f"--projection={projection}",
-        # layer name
-        "-l", layer_name,
-        # output directly to PMTiles
-        "-o", str(output_pmtiles),
-        # finally, the input file
-        str(input_path),
+        "-l",
+        layer_name,
+        "-o",
+        str(output_pmtiles),
+        str(source),
     ]
 
-    # Run and check for errors
+    # run it
     subprocess.run(cmd, check=True)
 
-    return output_pmtiles
+    # clean up any temp files we created
+    for f in cleanup:
+        try:
+            f.unlink()
+        except OSError:
+            pass
+
+    return str(output_pmtiles)

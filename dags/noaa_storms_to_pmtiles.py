@@ -43,19 +43,17 @@ def noaa_storms_to_pmtiles():
 
     @task
     def to_pmtiles(parquet_path: str) -> str:
-        # build a deterministic output filename (overwrite each run)
+        # deterministic output location
         output = os.path.join(BASE_TILE_DIR, "noaa_storms.pmtiles")
-        # ensure parent dir exists
         os.makedirs(os.path.dirname(output), exist_ok=True)
 
-        # call your helper with both in and out args
-        generate_vector_pmtiles(
+        # call helper and return its result
+        return generate_vector_pmtiles(
             input_path=parquet_path,
             output_pmtiles=output,
-            # you can also pass through any additional tippecanoe kwargs here,
-            # for example: min_zoom=0, max_zoom=6, layer="warnings", etc.
+            # e.g. layer_name="warnings"
         )
-        return output
+
 
     @task
     def upload(pmtiles_file: str) -> str:

@@ -98,12 +98,9 @@ byte order = 1
         os.makedirs(os.path.dirname(output_pmtiles), exist_ok=True)
 
         # generate the .pmtiles
-        generate_raster_pmtiles(
-            input_tif=diff_tif,
-            output_pmtiles=output_pmtiles,
-            # you can pass extra CLI options here if your helper supports them
-        )
-        return output_pmtiles
+        result_path = generate_raster_pmtiles(diff_tif, output_pmtiles)
+
+        return result_path
 
     @task
     def upload_to_s3(pmtiles_file: str) -> str:
