@@ -69,11 +69,27 @@ def noaa_storms_to_pmtiles():
             Key=key
         )
         return f"https://{S3_BUCKET}.s3.amazonaws.com/{key}"
+    
+    @task
+    def write_proof(pmtiles_path: str) -> str:
+        proof = {
+            "dag": "noaa_storms_to_pmtiles",
+            "pmtiles": pmtiles_path,
+            "exists": os.path.exists(pmtiles_path)
+        }
+        proof_file = os.path.join(BASE_TILE_DIR, "noaa_proof.json")
+        with open(proof_file, "w") as f:
+            json.dump(proof, f)
+        return proof_file
+
 
     # define DAG flow
     shp       = fetch_shapefile()
     parquet   = to_geoparquet(shp)
     tiles     = to_pmtiles(parquet)
     upload(tiles)
+    proof   = write_proof(tiles)
+
+    return proof
 
 dag = noaa_storms_to_pmtiles()

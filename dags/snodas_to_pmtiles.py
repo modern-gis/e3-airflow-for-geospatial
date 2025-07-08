@@ -123,6 +123,18 @@ byte order = 1
             Key=key
         )
         return f"https://{S3_BUCKET}.s3.amazonaws.com/{key}"
+    
+    @task
+    def write_raster_proof(pmtiles_path: str) -> str:
+        proof = {
+          "dag": "snodas_to_pmtiles",
+          "pmtiles": pmtiles_path,
+          "exists": os.path.exists(pmtiles_path)
+        }
+        f = os.path.join(BASE_RASTER_TILE_DIR, "snodas_proof.json")
+        with open(f, "w") as fh:
+            json.dump(proof, fh)
+        return f
 
     # DAG flow
     today_dat     = fetch_snodas_dat(1)
@@ -134,5 +146,8 @@ byte order = 1
     diff_tif      = compute_diff(today_tif, yesterday_tif)
     tiles         = to_pmtiles(diff_tif)
     upload_to_s3(tiles)
+    proof = write_raster_proof(tiles)
+    
+    return proof
 
 dag = snodas_to_pmtiles()
