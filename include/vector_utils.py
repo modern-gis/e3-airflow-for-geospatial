@@ -6,7 +6,7 @@ import subprocess
 import shutil
 from pathlib import Path
 from typing import Optional, Union
-
+import tempfile
 
 def download_and_extract_noaa_shapefile(output_dir: str = "data") -> str:
     """

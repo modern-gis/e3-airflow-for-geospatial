@@ -3,6 +3,7 @@ from datetime import timedelta, date, datetime
 import os
 import subprocess
 import requests
+from pathlib import Path
 
 from include.raster_utils import (
     extract_snodas_swe_file,
@@ -92,15 +93,22 @@ byte order = 1
 
     @task
     def to_pmtiles(diff_tif: str) -> str:
-        # build output path
-        basename = os.path.basename(diff_tif).replace("_diff.tif", ".pmtiles")
-        output_pmtiles = os.path.join(BASE_RASTER_TILE_DIR, basename)
-        os.makedirs(os.path.dirname(output_pmtiles), exist_ok=True)
+        # deterministic output filename per-day
+        output = os.path.join(
+            BASE_RASTER_TILE_DIR,
+            Path(diff_tif).stem + ".pmtiles"
+        )
+        os.makedirs(os.path.dirname(output), exist_ok=True)
 
-        # generate the .pmtiles
-        result_path = generate_raster_pmtiles(diff_tif, output_pmtiles)
-
-        return result_path
+        # call our helper — note `input_raster` & `fmt` match its signature
+        return str(generate_raster_pmtiles(
+            input_raster=diff_tif,
+            output_pmtiles=output,
+            fmt="WEBP",
+            tile_size=512,
+            resampling="bilinear",
+            silent=True
+        ))
 
     @task
     def upload_to_s3(pmtiles_file: str) -> str:

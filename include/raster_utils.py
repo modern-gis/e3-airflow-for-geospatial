@@ -4,17 +4,17 @@ import datetime
 import tarfile
 import requests
 from io import BytesIO
-
 import numpy as np
 import rioxarray as rxr
 from rio_tiler.io import COGReader
 from pmtiles.writer import Writer
 from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from PIL import Image
-import mercantile
 from pathlib import Path
 from typing import Literal
 import subprocess
+from typing import Union
+from typing_extensions import Literal
 
 def construct_snodas_url(date: datetime.date) -> str:
     """
@@ -71,8 +71,8 @@ def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: s
     return output_path
 
 def generate_raster_pmtiles(
-    input_raster: str | Path,
-    output_pmtiles: str | Path,
+    input_raster: Union[str, Path],
+    output_pmtiles: Union[str, Path],
     *,
     fmt: Literal["PNG", "JPEG", "WEBP"] = "WEBP",
     tile_size: int = 512,
@@ -80,34 +80,30 @@ def generate_raster_pmtiles(
     silent: bool = True,
 ) -> Path:
     """
-    Generate a PMTiles file from a raster using rio-pmtiles.
+    Generate a PMTiles file from a raster using rio-pmtiles, via an intermediate COG.
 
-    Parameters
-    ----------
-    input_raster
-        Path to the source raster (GeoTIFF, etc.).
-    output_pmtiles
-        Path where the .pmtiles will be written.
-    fmt
-        Output tile image format. One of "PNG", "JPEG", or "WEBP".
-    tile_size
-        Pixel dimensions of each tile (default 512).
-    resampling
-        Resampling algorithm for overviews.
-    silent
-        If True, adds `--silent` to suppress the progress bar.
-
-    Returns
-    -------
-    pathlib.Path
-        The path to the generated PMTiles file (same as `output_pmtiles`).
+    Returns the Path to the .pmtiles file.
     """
     input_raster = Path(input_raster)
     output_pmtiles = Path(output_pmtiles)
 
+    # build a COG path next to the input
+    cog_path = input_raster.with_name(f"{input_raster.stem}_cog.tif")
+
+    # 1) create a Cloud-Optimized GeoTIFF
+    subprocess.run([
+        "gdal_translate",
+        "-of", "COG",
+        str(input_raster),
+        str(cog_path),
+        "-co", "BLOCKSIZE=512",
+        "-co", "TILING_SCHEME=XYZ",
+    ], check=True)
+
+    # 2) produce PMTiles from that COG
     cmd = [
         "rio", "pmtiles",
-        str(input_raster),
+        str(cog_path),
         str(output_pmtiles),
         "--format", fmt,
         "--tile-size", str(tile_size),
@@ -116,10 +112,10 @@ def generate_raster_pmtiles(
     if silent:
         cmd.append("--silent")
 
-    # run the rio-pmtiles CLI; will raise CalledProcessError on failure
     subprocess.run(cmd, check=True)
 
     return output_pmtiles
+
 
 
 def extract_snodas_swe_file(tar_path: str, extract_to: str, date: datetime.date) -> str:
