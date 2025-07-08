@@ -26,9 +26,9 @@ RUN git clone https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
 # 3) Copy & install your Python requirements
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip \
- && pip install --no-cache-dir -r /tmp/requirements.txt
- 
-
+    && pip install numpy==1.26.4 \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
+    
 # 4) Airflow env vars
 ENV AIRFLOW_VERSION=3.0.1 \
     AIRFLOW_HOME=/workspace/airflow \
