@@ -64,34 +64,41 @@ def compute_raster_difference(
     output_tif: Union[str, Path],
 ) -> str:
     """
-    Subtract yesterday from today, writing a GeoTIFF that preserves
-    CRS, transform, nodata, dtype, etc.
+    Subtract yesterday's raster from today's, preserving CRS, transform, nodata, etc.
     """
     today_tif = Path(today_tif)
     yesterday_tif = Path(yesterday_tif)
     output_tif = Path(output_tif)
 
-    # read both rasters
+    # Read both rasters and capture metadata inside the context
     with rasterio.open(today_tif) as src1, rasterio.open(yesterday_tif) as src2:
         profile = src1.profile.copy()
         data1 = src1.read(1)
         data2 = src2.read(1)
+        nodata1 = src1.nodata
+        nodata2 = src2.nodata
 
-    # compute difference, respecting nodata
-    diff = data1.astype("float32") - data2.astype("float32")
-    mask = (data1 == profile.get("nodata")) | (data2 == src2.profile.get("nodata"))
-    diff[mask] = profile.get("nodata", -9999)
+    # Compute difference with proper masking
+    diff = data1.astype('float32') - data2.astype('float32')
+    mask = None
+    if nodata1 is not None or nodata2 is not None:
+        mask1 = (data1 == nodata1) if nodata1 is not None else False
+        mask2 = (data2 == nodata2) if nodata2 is not None else False
+        mask = mask1 | mask2
+        diff = diff.astype('float32')
+        diff[mask] = nodata1 if nodata1 is not None else -9999
 
-    # update profile for single band float32 output
+    # Update profile for single-band output
     profile.update(
-        dtype="float32",
+        dtype='float32',
         count=1,
-        compress="lzw",
+        compress='lzw',
+        nodata=nodata1
     )
 
-    # write it out
+    # Write difference GeoTIFF
     output_tif.parent.mkdir(parents=True, exist_ok=True)
-    with rasterio.open(output_tif, "w", **profile) as dst:
+    with rasterio.open(output_tif, 'w', **profile) as dst:
         dst.write(diff, 1)
 
     return str(output_tif)
