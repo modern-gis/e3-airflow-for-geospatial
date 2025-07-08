@@ -15,6 +15,7 @@ from typing import Literal
 import subprocess
 from typing import Union
 from typing_extensions import Literal
+import rasterio
 
 def construct_snodas_url(date: datetime.date) -> str:
     """
