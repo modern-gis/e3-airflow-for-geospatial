@@ -4,6 +4,8 @@ import tarfile
 import geopandas as gpd
 import subprocess
 import shutil
+from pathlib import Path
+from typing import Optional, Union
 
 
 def download_and_extract_noaa_shapefile(output_dir: str = "data") -> str:
@@ -42,47 +44,55 @@ def convert_shapefile_to_geoparquet(shp_path: str, output_path: str = "data/curr
     return output_path
 
 
-def generate_vector_pmtiles(parquet_path: str, output_pmtiles: str = None) -> str:
+def generate_vector_pmtiles(
+    input_path: Union[str, Path],
+    output_pmtiles: Union[str, Path],
+    layer_name: Optional[str] = None,
+    guess_maxzoom: bool = True,
+    projection: str = "EPSG:4326"
+) -> None:
     """
-    Converts a GeoParquet file into a PMTiles archive using tippecanoe + pmtiles CLI.
-    If output_pmtiles is not provided, defaults to output/{basename}.pmtiles
+    Generate a vector PMTiles file from GeoJSON/FlatGeobuf/etc using Tippecanoe.
+
+    Parameters
+    ----------
+    input_path
+        Path to the input vector file (GeoJSON, .fgb, .json.gz, .csv, etc).
+    output_pmtiles
+        Path where the .pmtiles file will be written.
+    layer_name
+        Name of the layer inside the vector tiles. Defaults to the input filename stem.
+    guess_maxzoom
+        If True, pass -zg to let tippecanoe pick a good maxzoom.
+    projection
+        The input projection; passed as --projection=<projection>.
+
+    Raises
+    ------
+    subprocess.CalledProcessError
+        If tippecanoe exits with a non-zero status.
     """
-    # derive default output if needed
-    base = os.path.splitext(os.path.basename(parquet_path))[0]
-    if output_pmtiles is None:
-        output_dir = os.path.join("output")
-        output_pmtiles = os.path.join(output_dir, f"{base}.pmtiles")
-    else:
-        output_dir = os.path.dirname(output_pmtiles) or "output"
+    input_path = Path(input_path)
+    output_pmtiles = Path(output_pmtiles)
 
-    os.makedirs(output_dir, exist_ok=True)
+    if layer_name is None:
+        layer_name = input_path.stem
 
-    geojson_path = os.path.join(output_dir, f"{base}.geojson")
-    mbtiles_path = os.path.join(output_dir, f"{base}.mbtiles")
-
-    # Convert to GeoJSON (tippecanoe input)
-    gdf = gpd.read_parquet(parquet_path)
-    gdf.to_file(geojson_path, driver="GeoJSON")
-
-    # Run tippecanoe to make .mbtiles
-    subprocess.run([
+    cmd = [
         "tippecanoe",
-        "-o", mbtiles_path,
-        "-l", "weather_warnings",
-        "-zg",
-        "--drop-densest-as-needed",
-        "--simplification=2",
-        "--force",
-        geojson_path
-    ], check=True)
+        # guess a sensible maxzoom based on data density
+        * (["-zg"] if guess_maxzoom else []),
+        # ensure we're in WGS84 by default
+        f"--projection={projection}",
+        # layer name
+        "-l", layer_name,
+        # output directly to PMTiles
+        "-o", str(output_pmtiles),
+        # finally, the input file
+        str(input_path),
+    ]
 
-    # Convert .mbtiles → .pmtiles
-    subprocess.run([
-        "pmtiles", "convert", mbtiles_path, output_pmtiles
-    ], check=True)
-
-    # Cleanup intermediate files
-    os.remove(geojson_path)
-    os.remove(mbtiles_path)
+    # Run and check for errors
+    subprocess.run(cmd, check=True)
 
     return output_pmtiles

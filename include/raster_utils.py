@@ -12,6 +12,9 @@ from pmtiles.writer import Writer
 from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from PIL import Image
 import mercantile
+from pathlib import Path
+from typing import Literal
+import subprocess
 
 def construct_snodas_url(date: datetime.date) -> str:
     """
@@ -67,62 +70,55 @@ def compute_raster_difference(tif_today: str, tif_yesterday: str, output_path: s
     diff.rio.to_raster(output_path)
     return output_path
 
-
-def generate_raster_pmtiles(input_tif: str, output_pmtiles: str, minzoom: int = 0, maxzoom: int = 8) -> str:
+def generate_raster_pmtiles(
+    input_raster: str | Path,
+    output_pmtiles: str | Path,
+    *,
+    fmt: Literal["PNG", "JPEG", "WEBP"] = "WEBP",
+    tile_size: int = 512,
+    resampling: Literal["nearest", "bilinear", "cubic", "lanczos"] = "bilinear",
+    silent: bool = True,
+) -> Path:
     """
-    Generate a PMTiles archive from a GeoTIFF COG using rio-tiler and pmtiles.Writer.
+    Generate a PMTiles file from a raster using rio-pmtiles.
+
+    Parameters
+    ----------
+    input_raster
+        Path to the source raster (GeoTIFF, etc.).
+    output_pmtiles
+        Path where the .pmtiles will be written.
+    fmt
+        Output tile image format. One of "PNG", "JPEG", or "WEBP".
+    tile_size
+        Pixel dimensions of each tile (default 512).
+    resampling
+        Resampling algorithm for overviews.
+    silent
+        If True, adds `--silent` to suppress the progress bar.
+
+    Returns
+    -------
+    pathlib.Path
+        The path to the generated PMTiles file (same as `output_pmtiles`).
     """
-    # Ensure output directory exists
-    out_dir = os.path.dirname(output_pmtiles)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    input_raster = Path(input_raster)
+    output_pmtiles = Path(output_pmtiles)
 
-    with open(output_pmtiles, "wb") as f:
-        writer = Writer(f)
-        with COGReader(input_tif) as cog:
-            bounds = cog.bounds
-            for z in range(minzoom, maxzoom + 1):
-                # Iterate tiles covering the dataset extent
-                for tile in mercantile.tiles(bounds[0], bounds[1], bounds[2], bounds[3], z):
-                    x, y = tile.x, tile.y
-                    try:
-                        # Read raw data and mask
-                        data, mask = cog.tile(x, y, z)
-                        # Apply mask: fill masked pixels with 0 and cast to uint8
-                        arr = np.ma.array(data, mask=mask).filled(0).astype(np.uint8)
-                        # Handle multi-band arrays
-                        if arr.ndim == 3:
-                            img_arr = np.transpose(arr, (1, 2, 0))
-                        else:
-                            img_arr = arr
-                        # Convert to PIL image
-                        img = Image.fromarray(img_arr)
-                        buf = BytesIO()
-                        img.save(buf, format="PNG")
-                        buf.seek(0)
+    cmd = [
+        "rio", "pmtiles",
+        str(input_raster),
+        str(output_pmtiles),
+        "--format", fmt,
+        "--tile-size", str(tile_size),
+        "--resampling", resampling,
+    ]
+    if silent:
+        cmd.append("--silent")
 
-                        # Write tile to PMTiles
-                        tid = zxy_to_tileid(z, x, y)
-                        writer.write_tile(tid, buf.read())
-                    except Exception as e:
-                        print(f"Tile error at z={z}, x={x}, y={y}: {e}")
-        # Finalize with metadata
-        writer.finalize(
-            metadata={
-                "tile_type": TileType.PNG,
-                "tile_compression": Compression.NONE,
-                "min_zoom": minzoom,
-                "max_zoom": maxzoom,
-                "min_lon_e7": int(-180.0 * 1e7),
-                "min_lat_e7": int(-85.0 * 1e7),
-                "max_lon_e7": int(180.0 * 1e7),
-                "max_lat_e7": int(85.0 * 1e7),
-                "center_zoom": minzoom,
-                "center_lon_e7": 0,
-                "center_lat_e7": 0,
-            },
-            data={}
-        )
+    # run the rio-pmtiles CLI; will raise CalledProcessError on failure
+    subprocess.run(cmd, check=True)
+
     return output_pmtiles
 
 

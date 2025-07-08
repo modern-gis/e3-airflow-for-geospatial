@@ -1,9 +1,8 @@
 from airflow.decorators import dag, task
 from datetime import timedelta, date, datetime
-from airflow.utils import timezone
+import os
 import subprocess
 import requests
-import os
 
 from include.raster_utils import (
     extract_snodas_swe_file,
@@ -12,7 +11,11 @@ from include.raster_utils import (
     construct_snodas_url
 )
 
-# Default DAG arguments
+# Base output directory for raster PMTiles
+AIRFLOW_HOME = os.environ.get("AIRFLOW_HOME", "/workspace/airflow")
+BASE_RASTER_TILE_DIR = os.path.join(AIRFLOW_HOME, "tiles", "raster")
+os.makedirs(BASE_RASTER_TILE_DIR, exist_ok=True)
+
 default_args = {
     "owner": "modern-gis",
     "depends_on_past": False,
@@ -34,57 +37,28 @@ def snodas_to_pmtiles():
     """
 
     @task
-    def fetch_today_snodas_dat() -> str:
-        today = date.today() - timedelta(days=1)
-        tar_path = os.path.join("/tmp", f"SNODAS_{today.strftime('%Y%m%d')}.tar")
+    def fetch_snodas_dat(offset_days: int) -> str:
+        target = date.today() - timedelta(days=offset_days)
+        tar_path = f"/tmp/SNODAS_{target:%Y%m%d}.tar"
 
-        # Download
-        url = construct_snodas_url(today)
+        url = construct_snodas_url(target)
         r = requests.get(url, stream=True)
         if r.status_code != 200:
-            raise Exception(f"Failed to download SNODAS archive: {url}")
+            raise RuntimeError(f"Failed to download SNODAS archive: {url}")
         with open(tar_path, "wb") as f:
             for chunk in r.iter_content(chunk_size=8192):
                 f.write(chunk)
 
-        # Extract SWE
-        return extract_snodas_swe_file(tar_path, "/tmp", today)
-
-    @task
-    def fetch_yesterday_snodas_dat() -> str:
-        yesterday = date.today() - timedelta(days=2)
-        tar_path = os.path.join("/tmp", f"SNODAS_{yesterday.strftime('%Y%m%d')}.tar")
-
-        # Download
-        url = construct_snodas_url(yesterday)
-        r = requests.get(url, stream=True)
-        if r.status_code != 200:
-            raise Exception(f"Failed to download SNODAS archive: {url}")
-        with open(tar_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        # Extract SWE
-        return extract_snodas_swe_file(tar_path, "/tmp", yesterday)
+        return extract_snodas_swe_file(tar_path, "/tmp", target)
 
     @task
     def convert_dat_to_geotiff(input_dat_gz_path: str) -> str:
-        """
-        Decompresses a SNODAS .dat.gz file, creates an ENVI header, and converts to GeoTIFF using gdal_translate.
-        """
-        import gzip
-        import shutil
-        import os
+        import gzip, shutil
 
-        # Remove .gz
         input_dat_path = input_dat_gz_path.replace(".gz", "")
-        
-        # Decompress
-        with gzip.open(input_dat_gz_path, "rb") as f_in:
-            with open(input_dat_path, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
+        with gzip.open(input_dat_gz_path, "rb") as f_in, open(input_dat_path, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
 
-        # Create .hdr file
         hdr_path = input_dat_path.replace(".dat", ".hdr")
         with open(hdr_path, "w") as hdr:
             hdr.write("""ENVI
@@ -98,53 +72,53 @@ interleave = bsq
 byte order = 1
 """)
 
-        # Generate output path
-        output_tif_path = input_dat_path.replace(".dat", ".tif")
-
-        # Choose correct coordinates for post-2013 files
+        output_tif = input_dat_path.replace(".dat", ".tif")
         cmd = [
-            "gdal_translate",
-            "-of", "GTiff",
+            "gdal_translate", "-of", "GTiff",
             "-a_srs", "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs",
             "-a_nodata", "-9999",
-            "-a_ullr", "-124.73333333333333", "52.87500000000000", "-66.94166666666667", "24.95000000000000",
-            input_dat_path,
-            output_tif_path,
+            "-a_ullr",
+            "-124.73333333333333", "52.87500000000000",
+            "-66.94166666666667", "24.95000000000000",
+            input_dat_path, output_tif,
         ]
         subprocess.run(cmd, check=True)
-
-        return output_tif_path
-
-    @task
-    def compute_difference(today_tif: str, yesterday_tif: str) -> str:
-        """
-        Computes raster difference (today - yesterday), saves to new GeoTIFF.
-        """
-        output_path = today_tif.replace(".tif", "_diff.tif")
-        return compute_raster_difference(today_tif, yesterday_tif, output_path)
+        return output_tif
 
     @task
-    def generate_pmtiles(diff_tif: str) -> str:
-        output_path = diff_tif.replace(".tif", ".pmtiles")
-        return generate_raster_pmtiles(diff_tif, output_path)
+    def compute_diff(today_tif: str, yesterday_tif: str) -> str:
+        diff_path = today_tif.replace(".tif", "_diff.tif")
+        return compute_raster_difference(today_tif, yesterday_tif, diff_path)
+
+    @task
+    def to_pmtiles(diff_tif: str) -> str:
+        # build output path
+        basename = os.path.basename(diff_tif).replace("_diff.tif", ".pmtiles")
+        output_pmtiles = os.path.join(BASE_RASTER_TILE_DIR, basename)
+        os.makedirs(os.path.dirname(output_pmtiles), exist_ok=True)
+
+        # generate the .pmtiles
+        generate_raster_pmtiles(
+            input_tif=diff_tif,
+            output_pmtiles=output_pmtiles,
+            # you can pass extra CLI options here if your helper supports them
+        )
+        return output_pmtiles
 
     @task
     def upload_to_s3(pmtiles_file: str) -> str:
-        """
-        Stub: upload to S3 or return path.
-        """
         print(f"Simulating upload of {pmtiles_file}")
-        return f"s3://your-bucket/path/{pmtiles_file.split('/')[-1]}"
+        return f"s3://your-bucket/path/{os.path.basename(pmtiles_file)}"
 
-    # DAG Task Flow
-    today_dat = fetch_today_snodas_dat()
-    yesterday_dat = fetch_yesterday_snodas_dat()
+    # DAG flow
+    today_dat     = fetch_snodas_dat(1)
+    yesterday_dat = fetch_snodas_dat(2)
 
-    today_tif = convert_dat_to_geotiff(today_dat)
+    today_tif     = convert_dat_to_geotiff(today_dat)
     yesterday_tif = convert_dat_to_geotiff(yesterday_dat)
 
-    diff_tif = compute_difference(today_tif, yesterday_tif)
-    tiles = generate_pmtiles(diff_tif)
+    diff_tif      = compute_diff(today_tif, yesterday_tif)
+    tiles         = to_pmtiles(diff_tif)
     upload_to_s3(tiles)
 
 dag = snodas_to_pmtiles()
