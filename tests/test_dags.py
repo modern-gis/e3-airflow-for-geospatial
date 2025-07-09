@@ -10,7 +10,7 @@ import pytest
 @pytest.fixture(autouse=True)
 
 def test_vector_proof():
-    proof_dir = Path(os.environ["AIRFLOW_HOME"]) / "proof"
+    proof_dir =  "airflow/proof"
     f = proof_dir / "noaa_proof.json"
     assert f.exists(), f"Missing proof file: {f}"
     data = json.loads(f.read_text())
@@ -21,7 +21,7 @@ def test_vector_proof():
 
 
 def test_raster_proof():
-    proof_dir = Path(os.environ["AIRFLOW_HOME"]) / "proof"
+    proof_dir = "airflow/proof"
     f = proof_dir / "snodas_proof.json"
     assert f.exists(), f"Missing proof file: {f}"
     data = json.loads(f.read_text())
