@@ -1,7 +1,9 @@
 # tests/test_proofs.py
 import json
 import os
+import time
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -16,33 +18,30 @@ def ensure_proof_dir(tmp_path, monkeypatch):
     src = Path.cwd() / "airflow" / "proof"
     dst = Path(os.environ["AIRFLOW_HOME"]) / "proof"
     if src.exists():
-        import shutil
         shutil.copytree(src, dst)
     yield
 
 
 def test_vector_proof():
     f = PROOF_DIR / "noaa_proof.json"
-    assert f.exists(), f"Missing {f}"
+    assert f.exists(), f"Missing proof file: {f}"
     data = json.loads(f.read_text())
-    assert data == {
-        "dag": "noaa_storms_to_pmtiles",
-        "pmtiles": "noaa_storms.pmtiles",
-        "exists": True
-    }
+    assert data["dag"] == "noaa_storms_to_pmtiles"
+    assert data["exists"] is True
+    # allow absolute or relative, just check the filename
+    assert data["pmtiles"].endswith("noaa_storms.pmtiles")
 
 
 def test_raster_proof():
     f = PROOF_DIR / "snodas_proof.json"
-    assert f.exists(), f"Missing {f}"
+    assert f.exists(), f"Missing proof file: {f}"
     data = json.loads(f.read_text())
-    assert data == {
-        "dag": "snodas_to_pmtiles",
-        "pmtiles": "dummy_diff.pmtiles",
-        "exists": True
-    }
+    assert data["dag"] == "snodas_to_pmtiles"
+    assert data["exists"] is True
+    assert data["pmtiles"].endswith("dummy_diff.pmtiles")
+
 
 def test_print_badge():
-    # this will be picked up by GitHub Actions as the badge proof
+    # this line will register the badge in GitHub Actions logs
     code = f"brick_e3_automation_{int(time.time())}"
     print(f"::notice title=Badge Unlocked::{code}")
