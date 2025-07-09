@@ -5,6 +5,7 @@ import subprocess
 import requests
 import boto3
 from pathlib import Path
+import json
 
 from include.raster_utils import (
     extract_snodas_swe_file,
@@ -17,6 +18,9 @@ from include.raster_utils import (
 AIRFLOW_HOME = os.environ.get("AIRFLOW_HOME", "/workspace/airflow")
 BASE_RASTER_TILE_DIR = os.path.join(AIRFLOW_HOME, "tiles", "raster")
 os.makedirs(BASE_RASTER_TILE_DIR, exist_ok=True)
+PROOF_DIR = os.path.join(AIRFLOW_HOME, "proof")
+os.makedirs(PROOF_DIR, exist_ok=True)
+
 
 S3_BUCKET = os.environ["MODERN_GIS_S3_BUCKET"]
 s3 = boto3.client("s3")
@@ -131,7 +135,7 @@ byte order = 1
           "pmtiles": pmtiles_path,
           "exists": os.path.exists(pmtiles_path)
         }
-        f = os.path.join(BASE_RASTER_TILE_DIR, "snodas_proof.json")
+        f = os.path.join(PROOF_DIR, "snodas_proof.json")
         with open(f, "w") as fh:
             json.dump(proof, fh)
         return f
