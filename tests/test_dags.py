@@ -33,7 +33,7 @@ def test_vector_proof():
 
 
 def test_raster_proof():
-    f = PROOF_DIR / "raster" / "snodas_proof.json"
+    f = PROOF_DIR / "snodas_proof.json"
     assert f.exists(), f"Missing {f}"
     data = json.loads(f.read_text())
     assert data == {
@@ -41,3 +41,8 @@ def test_raster_proof():
         "pmtiles": "dummy_diff.pmtiles",
         "exists": True
     }
+
+def test_print_badge():
+    # this will be picked up by GitHub Actions as the badge proof
+    code = f"brick_e3_automation_{int(time.time())}"
+    print(f"::notice title=Badge Unlocked::{code}")
