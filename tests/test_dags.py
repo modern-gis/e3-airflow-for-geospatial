@@ -7,23 +7,11 @@ import shutil
 
 import pytest
 
-PROOF_DIR = Path(os.environ.get("AIRFLOW_HOME", "/airflow")) / "proof"
-
-
 @pytest.fixture(autouse=True)
-def ensure_proof_dir(tmp_path, monkeypatch):
-    # Redirect AIRFLOW_HOME to a temp workspace so tests are hermetic
-    monkeypatch.setenv("AIRFLOW_HOME", str(tmp_path / "airflow"))
-    # Copy in your checked-in proof files
-    src = Path.cwd() / "airflow" / "proof"
-    dst = Path(os.environ["AIRFLOW_HOME"]) / "proof"
-    if src.exists():
-        shutil.copytree(src, dst)
-    yield
-
 
 def test_vector_proof():
-    f = PROOF_DIR / "noaa_proof.json"
+    proof_dir = Path(os.environ["AIRFLOW_HOME"]) / "proof"
+    f = proof_dir / "noaa_proof.json"
     assert f.exists(), f"Missing proof file: {f}"
     data = json.loads(f.read_text())
     assert data["dag"] == "noaa_storms_to_pmtiles"
@@ -33,7 +21,8 @@ def test_vector_proof():
 
 
 def test_raster_proof():
-    f = PROOF_DIR / "snodas_proof.json"
+    proof_dir = Path(os.environ["AIRFLOW_HOME"]) / "proof"
+    f = proof_dir / "snodas_proof.json"
     assert f.exists(), f"Missing proof file: {f}"
     data = json.loads(f.read_text())
     assert data["dag"] == "snodas_to_pmtiles"
