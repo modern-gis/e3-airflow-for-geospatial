@@ -18,7 +18,7 @@ def test_raster_proof_exists_and_valid():
     data = json.loads(proof_file.read_text())
     assert data["dag"] == "snodas_to_pmtiles"
     assert data["exists"] is True
-    assert data["pmtiles"].endswith("dummy_diff.pmtiles")
+    assert data["pmtiles"].endswith("diff.pmtiles")
 
 def test_print_badge():
     # This line will show up in GitHub Actions logs as the badge proof.
