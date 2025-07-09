@@ -7,7 +7,7 @@ import shutil
 
 import pytest
 
-PROOF_DIR = Path(os.environ.get("AIRFLOW_HOME", "/workspace/airflow")) / "proof"
+PROOF_DIR = Path(os.environ.get("AIRFLOW_HOME", "/airflow")) / "proof"
 
 
 @pytest.fixture(autouse=True)
