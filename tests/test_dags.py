@@ -25,7 +25,7 @@ def test_vector_dag_writes_proof():
     # access the unwrapped task
     write_proof = dag.write_proof.__wrapped__
     # create a fake pmtiles file
-    base = Path(os.environ["AIRFLOW_HOME"]) / "tiles"
+    base = Path(os.environ["AIRFLOW_HOME"]) / "proof"
     base.mkdir(parents=True)
     fake = base / "noaa_storms.pmtiles"
     fake.write_text("dummy")
@@ -40,7 +40,7 @@ def test_vector_dag_writes_proof():
 def test_raster_dag_writes_proof():
     dag = snodas_to_pmtiles()
     write_proof = dag.write_raster_proof.__wrapped__
-    base = Path(os.environ["AIRFLOW_HOME"]) / "tiles" / "raster"
+    base = Path(os.environ["AIRFLOW_HOME"]) / "proof" / "raster"
     base.mkdir(parents=True, exist_ok=True)
     fake = base / "dummy_diff.pmtiles"
     fake.write_text("dummy")
